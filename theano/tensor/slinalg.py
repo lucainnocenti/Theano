@@ -538,14 +538,27 @@ class ExpmGrad(Op):
         # Kalbfleisch and Lawless, J. Am. Stat. Assoc. 80 (1985) Equation 3.4
         # Kind of... You need to do some algebra from there to arrive at
         # this expression.
+        # from IPython.core.debugger import set_trace; set_trace()
         (A, gA) = inputs
         (out,) = outputs
         w, V = scipy.linalg.eig(A, right=True)
         U = scipy.linalg.inv(V).T
 
-        exp_w = np.exp(w)
-        X = np.subtract.outer(exp_w, exp_w) / np.subtract.outer(w, w)
-        np.fill_diagonal(X, exp_w)
+        def _normalized_exp_diff(x, y):
+            delta = x - y
+            if np.abs(delta) < 1e-6:
+                return np.exp(x) * (1 + delta / 2 + delta**2 / 6)
+            return (np.exp(x) - np.exp(y)) / (x - y)
+
+        normalized_exp_diff = np.frompyfunc(_normalized_exp_diff, 2, 1)
+        X = normalized_exp_diff.outer(w, w).astype(w.dtype)
+        # X = np.subtract.outer(exp_w, exp_w) / np.subtract.outer(w, w)
+        # exp_diff = np.subtract.outer(exp_w, exp_w)
+        # with warnings.catch_warnings():
+        #     warnings.simplefilter("ignore", RuntimeWarning)
+        #     X = exp_diff / np.subtract.outer(w, w)
+        # X[exp_diff == 0] = 1
+        # np.fill_diagonal(X, exp_w)
         Y = U.dot(V.T.dot(gA).dot(U) * X).dot(V.T)
 
         with warnings.catch_warnings():
